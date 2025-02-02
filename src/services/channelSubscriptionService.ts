@@ -94,14 +94,14 @@ export class ChannelSubscriptionService {
   }
 
   async getSubscriptionBychannelUserIds(
-    channelId: string,
-    userId: string
+    userId: string,
+    channelId: string
   ): Promise<ChannelSubscriptionType | null> {
     try {
       const subscription =
         await this.repository.getChannelSubscriptionBychannelUserId(
-          userId,
-          channelId
+          channelId,
+          userId
         );
       console.log(subscription, "status of sub");
       if (!subscription) {

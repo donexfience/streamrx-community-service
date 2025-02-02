@@ -18,6 +18,7 @@ export class SubscriptionController {
         message: "Successfully retrieved subscribed channels",
       });
     } catch (error) {
+      console.log(error, "of user getting");
       res.status(500).json({
         success: false,
         message:

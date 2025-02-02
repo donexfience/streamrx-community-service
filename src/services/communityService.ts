@@ -5,118 +5,79 @@ import Message, { Message as MessageType } from "../models/schemas/message";
 export class CommunityChatMessageService {
   constructor(private messageRepository: CommunityChatMessageRepository) {}
 
-  async getChannelMessages(
-    channelId: string,
-    page: number = 1,
-    limit: number = 50
-  ) {
-    try {
-      const { messages, total } = await this.messageRepository.findByChannelId(
-        channelId,
-        page,
-        limit
-      );
-
-      return {
-        messages,
-        total,
-        currentPage: page,
-        totalPages: Math.ceil(total / limit),
-      };
-    } catch (error) {
-      throw new Error("Failed to fetch channel messages");
-    }
-  }
-
-  async createMessage(messageData: Partial<MessageType>) {
-    try {
-      const newMessage = {
+  async sendMessage(messageData: Partial<MessageType>): Promise<MessageType> {
+    if (messageData.replyTo?._id) {
+      const parentMessage = await Message.findById(messageData.replyTo._id);
+      if (!parentMessage) {
+        throw new Error("Parent message not found");
+      }
+      const newMessage = await this.messageRepository.createMessage({
         ...messageData,
-        channelId: new Types.ObjectId(messageData.channelId),
-        senderId: new Types.ObjectId(messageData.senderId),
-        replyTo: messageData.replyTo
-          ? new Types.ObjectId(messageData.replyTo)
-          : undefined,
-      };
-
-      return await this.messageRepository.create(newMessage);
-    } catch (error) {
-      throw new Error("Failed to create message");
-    }
-  }
-
-  async updateMessage(messageId: string, userId: string, content: string) {
-    try {
-      const message = await this.messageRepository.findById(messageId);
-
-      if (!message) {
-        throw new Error("Message not found");
-      }
-
-      if (message.senderId.toString() !== userId) {
-        throw new Error("Unauthorized to edit this message");
-      }
-
-      return await this.messageRepository.update(messageId, {
-        content,
-        isEdited: true,
+        replyTo: messageData.replyTo._id,
       });
-    } catch (error) {
-      throw new Error("Failed to update message");
-    }
-  }
 
-  async deleteMessage(messageId: string, userId: string) {
-    try {
-      const message = await this.messageRepository.findById(messageId);
-
-      if (!message) {
-        throw new Error("Message not found");
-      }
-
-      if (message.senderId.toString() !== userId) {
-        throw new Error("Unauthorized to delete this message");
-      }
-
-      return await this.messageRepository.delete(messageId);
-    } catch (error) {
-      throw new Error("Failed to delete message");
-    }
-  }
-
-  async addReaction(messageId: string, userId: string, emoji: string) {
-    try {
-      const updatedMessage = await this.messageRepository.addReaction(
-        messageId,
-        userId,
-        emoji
+      await Message.findByIdAndUpdate(
+        messageData.replyTo._id,
+        {
+          $push: {
+            replies: {
+              messageId: newMessage._id,
+              userId: messageData.senderId,
+              content: messageData.content,
+              fileUrl: messageData.fileUrl,
+              messageType: messageData.messageType || "text",
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true }
       );
 
-      if (!updatedMessage) {
-        throw new Error("Message not found");
-      }
-
-      return updatedMessage;
-    } catch (error) {
-      throw new Error("Failed to add reaction");
+      return newMessage;
     }
+
+    return await this.messageRepository.createMessage(messageData);
   }
 
-  async addReply(messageId: string, userId: string, content: string) {
-    try {
-      const updatedMessage = await this.messageRepository.addReply(
-        messageId,
-        userId,
-        content
-      );
+  async getChannelMessages(channelId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const message = await this.messageRepository.getChannelMessages(
+      channelId,
+      limit,
+      skip
+    );
+    console.log(message, "message at last in the service ");
+    return message;
+  }
 
-      if (!updatedMessage) {
-        throw new Error("Message not found");
-      }
+  async editMessage(
+    messageId: Types.ObjectId,
+    content: string
+  ): Promise<MessageType | null> {
+    return await this.messageRepository.updateMessage(messageId, { content });
+  }
 
-      return updatedMessage;
-    } catch (error) {
-      throw new Error("Failed to add reply");
+  async handleReaction(
+    messageId: Types.ObjectId,
+    userId: Types.ObjectId,
+    emoji: string
+  ): Promise<MessageType | null> {
+    return await this.messageRepository.addReaction(messageId, userId, emoji);
+  }
+
+  async replyToMessage(
+    messageId: Types.ObjectId,
+    replyData: {
+      userId: Types.ObjectId;
+      content: string;
+      fileUrl?: string;
+      messageType?: "text" | "image";
     }
+  ): Promise<MessageType | null> {
+    return await this.messageRepository.addReply(messageId, {
+      ...replyData,
+      messageId,
+      createdAt: new Date(),
+    });
   }
 }

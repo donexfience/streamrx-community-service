@@ -29,8 +29,11 @@ class App {
       cors: {
         origin: process.env.FRONTEND_URL || "http://localhost:3001",
         methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+        credentials: true,
       },
+      transports: ["websocket", "polling"],
     });
+
     this.initializeMiddleware();
     this.initializeServices();
     this.startConsuming();
@@ -71,6 +74,10 @@ class App {
         console.log(`Client disconnected: ${socket.id}`);
       });
 
+      socket.onAny((eventName, ...args) => {
+        console.log(`Received event "${eventName}":`, args);
+      });
+
       socket.on("message", (data) => {
         console.log("Received message:", data);
         this.io.emit("message", data);
@@ -81,7 +88,7 @@ class App {
     await Database.connect();
   }
   public listen() {
-    this.app.listen(this.port, () => {
+    this.server.listen(this.port, () => {
       console.log(`CHANNEL-SERVICE RUNNING ON PORT  ${this.port}`);
     });
   }

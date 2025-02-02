@@ -24,11 +24,35 @@ export class ChannelSubscriptionRepository
     channelId: string,
     userId: string
   ): Promise<ChannelSubscriptionType | null> {
-    return await ChannelSubscription.findOne({
-      channelId: new Types.ObjectId(channelId),
-      userId: new Types.ObjectId(userId),
+    console.log("Original IDs:", { channelId, userId });
+
+    const channelObjId = Types.ObjectId.isValid(channelId)
+      ? new Types.ObjectId(channelId)
+      : channelId;
+    const userObjId = Types.ObjectId.isValid(userId)
+      ? new Types.ObjectId(userId)
+      : userId;
+
+    console.log("Converted IDs:", {
+      channelObjId: channelObjId.toString(),
+      userObjId: userObjId.toString(),
+    });
+
+    const subscription = await ChannelSubscription.findOne({
+      channelId: channelObjId,
+      userId: userObjId,
+      status: "active",
+    }).lean();
+
+    console.log("Query result:", subscription);
+
+    console.log("Executed query:", {
+      channelId: channelObjId,
+      userId: userObjId,
       status: "active",
     });
+
+    return subscription;
   }
 
   async unsubscribe(
@@ -68,7 +92,6 @@ export class ChannelSubscriptionRepository
       return false;
     }
   }
-
 
   async getSubscriberCount(channelId: string): Promise<number> {
     return await ChannelSubscription.countDocuments({

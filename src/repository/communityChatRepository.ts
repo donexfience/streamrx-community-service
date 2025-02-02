@@ -1,113 +1,128 @@
 import { Types } from "mongoose";
-import Message, { Message as MessageType } from "../models/schemas/message";
+import Message, {
+  MessageReply,
+  Message as MessageType,
+} from "../models/schemas/message";
 
 export class CommunityChatMessageRepository {
-  async findById(messageId: string): Promise<MessageType | null> {
-    return Message.findById(messageId)
-      .populate("senderId", "name profileImage")
-      .populate("replies.userId", "name profileImage")
-      .populate("replyTo");
+  async createMessage(messageData: Partial<MessageType>): Promise<MessageType> {
+    const message = new Message(messageData);
+    return await message.save();
   }
 
-  async findByChannelId(
+  async getChannelMessages(
     channelId: string,
-    page: number,
-    limit: number
-  ): Promise<{ messages: MessageType[]; total: number }> {
-    const skip = (page - 1) * limit;
+    page: number = 1,
+    limit: number = 50
+  ) {
+    try {
+      const skip = (page - 1) * limit;
+      console.log(channelId, "id in the repository");
 
-    const [messages, total] = await Promise.all([
-      Message.find({ channelId })
+      const messages = await Message.find({ channelId })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("senderId", "name profileImage")
-        .populate("replies.userId", "name profileImage")
-        .populate("replyTo"),
-      Message.countDocuments({ channelId }),
-    ]);
+        .populate({
+          path: "senderId",
+          model: "User",
+          select: "_id username profileImageURL",
+        })
+        .populate({
+          path: "replyTo",
+          model: "Message",
+          populate: {
+            path: "senderId",
+            model: "User",
+            select: "_id username profileImageURL",
+          },
+        })
+        .lean();
+      console.log(messages, "got messagees after the data operation");
+      const transformedMessages = messages.map((message) => {
+        const reactionMap = new Map();
 
-    return { messages, total };
+        message.reactions.forEach((reaction) => {
+          if (!reactionMap.has(reaction.emoji)) {
+            reactionMap.set(reaction.emoji, {
+              emoji: reaction.emoji,
+              users: [],
+            });
+          }
+          reactionMap
+            .get(reaction.emoji)
+            .users.push(reaction.userId.toString());
+        });
+
+        return {
+          ...message,
+          reactions: Array.from(reactionMap.values()),
+          replyTo: message.replyTo
+            ? {
+                _id: message.replyTo._id,
+                content: message.replyTo.content,
+                senderId: {
+                  name: message.replyTo.senderId?.name,
+                },
+              }
+            : undefined,
+        };
+      });
+
+      return transformedMessages.reverse();
+    } catch (error) {
+      console.error("Error fetching channel messages:", error);
+      throw new Error("Failed to fetch channel messages");
+    }
   }
 
-  async create(messageData: Partial<MessageType>): Promise<MessageType> {
-    const message = new Message(messageData);
-    await message.save();
-    const plainDocument = message.toObject();
-    return plainDocument;
-  }
-
-  async update(
-    messageId: string,
-    updateData: Partial<MessageType>
+  async updateMessage(
+    messageId: Types.ObjectId,
+    update: Partial<MessageType>
   ): Promise<MessageType | null> {
-    const message = await Message.findByIdAndUpdate(
+    return await Message.findByIdAndUpdate(
       messageId,
-      { $set: updateData },
+      { ...update, isEdited: true },
       { new: true }
-    )
-      .populate("senderId", "name profileImage")
-      .populate("replies.userId", "name profileImage");
-
-    return message;
-  }
-
-  async delete(messageId: string): Promise<boolean> {
-    const result = await Message.deleteOne({ _id: messageId });
-    return result.deletedCount === 1;
+    ).populate("senderId", "name profileImage");
   }
 
   async addReaction(
-    messageId: string,
-    userId: string,
+    messageId: Types.ObjectId,
+    userId: Types.ObjectId,
     emoji: string
   ): Promise<MessageType | null> {
     const message = await Message.findById(messageId);
     if (!message) return null;
 
     const existingReactionIndex = message.reactions.findIndex(
-      (reaction) => reaction.userId.toString() === userId
+      (reaction) =>
+        reaction.userId.toString() === userId.toString() &&
+        reaction.emoji === emoji
     );
 
     if (existingReactionIndex > -1) {
       message.reactions.splice(existingReactionIndex, 1);
+    } else {
+      message.reactions.push({ userId, emoji });
     }
 
-    message.reactions.push({
-      userId: new Types.ObjectId(userId),
-      emoji,
-    });
-
-    await message.save();
-    return this.findById(messageId);
+    return await message.save();
   }
 
   async addReply(
-    messageId: string,
-    userId: string,
-    content: string
+    messageId: Types.ObjectId,
+    replyData: Partial<MessageReply>
   ): Promise<MessageType | null> {
-    const message = await Message.findById(messageId);
-    if (!message) return null;
-
-    message.replies.push({
-      messageId: new Types.ObjectId(messageId),
-      userId: new Types.ObjectId(userId),
-      content,
-      createdAt: new Date(),
-    });
-
-    await message.save();
-    return this.findById(messageId);
+    return await Message.findByIdAndUpdate(
+      messageId,
+      { $push: { replies: replyData } },
+      { new: true }
+    ).populate("senderId", "name profileImage");
   }
 
-  async findUserMessages(
-    userId: string,
-    channelId: string
-  ): Promise<MessageType[]> {
-    return Message.find({
-      channelId,
-      senderId: userId,
-    }).sort({ createdAt: -1 });
+  async deleteMessage(messageId: Types.ObjectId): Promise<boolean> {
+    const result = await Message.deleteOne({ _id: messageId });
+    return result.deletedCount > 0;
   }
 }

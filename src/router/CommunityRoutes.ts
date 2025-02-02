@@ -20,30 +20,5 @@ export class CommunityChatRoutes {
     );
 
     const chatController = new ChatController(communityChatMessageService);
-
-    this.router.get(
-      "/channel/:channelId/messages",
-      chatController.getChannelMessages.bind(chatController)
-    );
-    this.router.post(
-      "/messages",
-      chatController.createMessage.bind(chatController)
-    );
-    this.router.put(
-      "/messages/:messageId",
-      chatController.updateMessage.bind(chatController)
-    );
-    this.router.delete(
-      "/messages/:messageId",
-      chatController.deleteMessage.bind(chatController)
-    );
-    this.router.post(
-      "/messages/:messageId/reaction",
-      chatController.addReaction.bind(chatController)
-    );
-    this.router.post(
-      "/messages/:messageId/reply",
-      chatController.addReply.bind(chatController)
-    );
   }
 }

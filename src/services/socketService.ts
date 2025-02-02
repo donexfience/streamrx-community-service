@@ -1,10 +1,14 @@
-// src/services/socketService.ts
 import { Server, Socket } from "socket.io";
+import { Types } from "mongoose";
 import { CommunityChatMessageService } from "./communityService";
 import { ChannelSubscriptionService } from "./channelSubscriptionService";
 import { CommunityChatMessageRepository } from "../repository/communityChatRepository";
 import { ChannelSubscriptionRepository } from "../repository/channelSubscription";
 import { ChannelRepostiory } from "../repository/channelRepository";
+import Message, {
+  MessageReply,
+  Message as MessageType,
+} from "../models/schemas/message";
 
 export class SocketService {
   private io: Server;
@@ -26,7 +30,6 @@ export class SocketService {
 
   private setupSocketHandlers() {
     this.io.on("connection", (socket: Socket) => {
-      // Join/Leave Channel handlers
       socket.on(
         "join-channel",
         async (data: { channelId: string; userId: string }) => {
@@ -41,20 +44,9 @@ export class SocketService {
         }
       );
 
-      // Message handlers
-      socket.on(
-        "send-message",
-        async (data: {
-          channelId: string;
-          senderId: string;
-          content: string;
-          messageType: string;
-          fileUrl?: string;
-          replyTo?: string;
-        }) => {
-          await this.handleNewMessage(socket, data);
-        }
-      );
+      socket.on("send-message", async (data: any) => {
+        await this.handleNewMessage(socket, data);
+      });
 
       socket.on(
         "edit-message",
@@ -68,7 +60,6 @@ export class SocketService {
         }
       );
 
-      // Reaction handler
       socket.on(
         "react-to-message",
         async (data: {
@@ -81,7 +72,6 @@ export class SocketService {
         }
       );
 
-      // Reply handler
       socket.on(
         "reply-to-message",
         async (data: {
@@ -89,12 +79,17 @@ export class SocketService {
           userId: string;
           content: string;
           channelId: string;
+          fileUrl?: string;
+          messageType?: "text" | "image";
         }) => {
           await this.handleMessageReply(socket, data);
         }
       );
 
-      // Typing indicator handlers
+      socket.on("get-message-history", (data: { channelId: string }) => {
+        this.handleGetMessagHistory(socket, data);
+      });
+
       socket.on(
         "typing-started",
         (data: { channelId: string; userId: string }) => {
@@ -109,7 +104,6 @@ export class SocketService {
         }
       );
 
-      // Disconnect handler
       socket.on("disconnect", () => {
         this.handleDisconnect(socket);
       });
@@ -123,8 +117,8 @@ export class SocketService {
     try {
       const subscription =
         await this.subscriptionService.getSubscriptionBychannelUserIds(
-          data.channelId,
-          data.userId
+          data.userId,
+          data.channelId
         );
 
       if (!subscription?.status) {
@@ -132,26 +126,13 @@ export class SocketService {
         return;
       }
 
-      // Join the socket room
       socket.join(data.channelId);
 
-      // Add user to connected users for this channel
       if (!this.connectedUsers.has(data.channelId)) {
         this.connectedUsers.set(data.channelId, new Set());
       }
       this.connectedUsers.get(data.channelId)?.add(data.userId);
 
-      // Get latest messages
-      const messageData = await this.messageService.getChannelMessages(
-        data.channelId,
-        1,
-        50
-      );
-
-      // Send initial data to the user
-      socket.emit("message-history", messageData.messages);
-
-      // Notify channel about new user
       this.io.to(data.channelId).emit("user-joined", {
         userId: data.userId,
         onlineUsers: Array.from(this.connectedUsers.get(data.channelId) || []),
@@ -159,6 +140,17 @@ export class SocketService {
     } catch (error) {
       socket.emit("error", { message: "Failed to join channel" });
     }
+  }
+
+  private async handleGetMessagHistory(
+    socket: Socket,
+    data: { channelId: string }
+  ) {
+    console.log(data.channelId, "channelId");
+    const message = await this.messageService.getChannelMessages(
+      data.channelId
+    );
+    socket.emit("message-history", message);
   }
 
   private handleLeaveChannel(
@@ -173,10 +165,42 @@ export class SocketService {
     });
   }
 
-  private async handleNewMessage(socket: Socket, data: any) {
+  private async handleNewMessage(
+    socket: Socket,
+    data: {
+      channelId: string;
+      senderId: string;
+      content: string;
+      messageType: "text" | "image" | "video" | "file";
+      fileUrl?: string;
+      replyTo?: {
+        _id: string;
+      };
+    }
+  ) {
     try {
-      const message = await this.messageService.createMessage(data);
-      this.io.to(data.channelId).emit("new-message", message);
+      const messageData: any = {
+        channelId: new Types.ObjectId(data.channelId),
+        senderId: new Types.ObjectId(data.senderId),
+        content: data.content,
+        messageType: data.messageType,
+        fileUrl: data.fileUrl,
+      };
+      if (data.replyTo) {
+        messageData.replyTo = data.replyTo._id;
+      }
+
+      const message = await this.messageService.sendMessage(messageData);
+      const populatedMessage = await Message.findById(message._id)
+        .populate("senderId", "username profileImageURL")
+        .populate({
+          path: "replyTo",
+          populate: {
+            path: "senderId",
+            select: "username profileImageURL",
+          },
+        });
+      this.io.to(data.channelId).emit("new-message", populatedMessage);
     } catch (error) {
       socket.emit("error", { message: "Failed to send message" });
     }
@@ -186,15 +210,13 @@ export class SocketService {
     socket: Socket,
     data: {
       messageId: string;
-      userId: string;
       content: string;
       channelId: string;
     }
   ) {
     try {
-      const updatedMessage = await this.messageService.updateMessage(
-        data.messageId,
-        data.userId,
+      const updatedMessage = await this.messageService.editMessage(
+        new Types.ObjectId(data.messageId),
         data.content
       );
 
@@ -216,9 +238,9 @@ export class SocketService {
     }
   ) {
     try {
-      const updatedMessage = await this.messageService.addReaction(
-        data.messageId,
-        data.userId,
+      const updatedMessage = await this.messageService.handleReaction(
+        new Types.ObjectId(data.messageId),
+        new Types.ObjectId(data.userId),
         data.emoji
       );
 
@@ -239,13 +261,21 @@ export class SocketService {
       userId: string;
       content: string;
       channelId: string;
+      fileUrl?: string;
+      messageType?: "text" | "image";
     }
   ) {
     try {
-      const updatedMessage = await this.messageService.addReply(
-        data.messageId,
-        data.userId,
-        data.content
+      const replyData = {
+        userId: new Types.ObjectId(data.userId),
+        content: data.content,
+        fileUrl: data.fileUrl,
+        messageType: data.messageType || ("text" as "text" | "image"),
+      };
+
+      const updatedMessage = await this.messageService.replyToMessage(
+        new Types.ObjectId(data.messageId),
+        replyData
       );
 
       if (updatedMessage) {
@@ -273,7 +303,6 @@ export class SocketService {
   }
 
   private handleDisconnect(socket: Socket) {
-    // Clean up user from all channels they were in
     this.connectedUsers.forEach((users, channelId) => {
       users.forEach((userId) => {
         if (socket.rooms.has(channelId)) {
