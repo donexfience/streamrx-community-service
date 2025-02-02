@@ -1,0 +1,123 @@
+import { ChannelRepostiory } from "../repository/channelRepository";
+import { ChannelSubscriptionRepository } from "../repository/channelSubscription";
+import ChannelSubscription, {
+  ChannelSubscription as ChannelSubscriptionType,
+} from "../models/schemas/subscription";
+import Channel, { Channel as ChannelType } from "./../models/schemas/channel";
+import { IChannelDocument } from "../interface/IChannel";
+
+export class ChannelSubscriptionService {
+  constructor(
+    private repository: ChannelSubscriptionRepository,
+    private channelRepository: ChannelRepostiory
+  ) {}
+
+  async subscribe(
+    userId: string,
+    channelId: string
+  ): Promise<ChannelSubscriptionType> {
+    try {
+      const currentStatus = await this.repository.getSubscriptionStatus(
+        userId,
+        channelId
+      );
+      if (currentStatus === true) {
+        throw new Error("Already subscribed to this channel");
+      }
+      await this.channelRepository.subscribe(channelId);
+      return await this.repository.subscribe(userId, channelId);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Already subscribed to this channel"
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to subscribe to channel");
+    }
+  }
+
+  async getUserSubscriptions(
+    userId: string
+  ): Promise<ChannelSubscriptionType[]> {
+    try {
+      const subscriptions = await this.repository.getSubscriptions(userId);
+      if (!subscriptions.length) {
+        return [];
+      }
+      return subscriptions;
+    } catch (error) {
+      throw new Error("Failed to get user subscriptions");
+    }
+  }
+  async unsubscribe(
+    userId: string,
+    channelId: string
+  ): Promise<ChannelSubscriptionType> {
+    try {
+      const currentStatus = await this.repository.getSubscriptionStatus(
+        userId,
+        channelId
+      );
+      if (currentStatus === false) {
+        throw new Error("Not currently subscribed to this channel");
+      }
+      await this.channelRepository.unsubscribe(channelId);
+      return await this.repository.unsubscribe(userId, channelId);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Not currently subscribed to this channel"
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to unsubscribe from channel");
+    }
+  }
+  async getSubscriptionStatus(
+    userId: string,
+    channelId: string
+  ): Promise<boolean> {
+    try {
+      const subscription = await this.repository.getSubscriptionStatus(
+        userId,
+        channelId
+      );
+      console.log(subscription, "status of sub");
+      if (!subscription) {
+        throw new Error("Subscription not found");
+      }
+      return subscription;
+    } catch (error) {
+      throw new Error("Failed to get subscription status");
+    }
+  }
+
+  async getSubscriptionBychannelUserIds(
+    channelId: string,
+    userId: string
+  ): Promise<ChannelSubscriptionType | null> {
+    try {
+      const subscription =
+        await this.repository.getChannelSubscriptionBychannelUserId(
+          userId,
+          channelId
+        );
+      console.log(subscription, "status of sub");
+      if (!subscription) {
+        throw new Error("Subscription not found");
+      }
+      return subscription;
+    } catch (error) {
+      throw new Error("Failed to get subscription status");
+    }
+  }
+
+  async getSubscriberCount(channelId: string): Promise<number> {
+    try {
+      return await this.repository.getSubscriberCount(channelId);
+    } catch (error) {
+      throw new Error("Failed to get subscriber count");
+    }
+  }
+}
