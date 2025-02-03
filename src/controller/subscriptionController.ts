@@ -28,4 +28,22 @@ export class SubscriptionController {
       });
     }
   };
+  getAllsubscribers: RequestHandler = async (req: Request, res: Response) => {
+    try {
+      const channelId = req.params.channelId;
+      const subscribedChannels =
+        await this.subscriptionService.getAllSubscribers(channelId);
+
+      res.status(200).json(subscribedChannels);
+    } catch (error) {
+      console.log(error, "of sub getting error");
+      res.status(500).json({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to retrieve subscribed channels",
+      });
+    }
+  };
 }

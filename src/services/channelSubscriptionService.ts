@@ -120,4 +120,13 @@ export class ChannelSubscriptionService {
       throw new Error("Failed to get subscriber count");
     }
   }
+
+  async getAllSubscribers(channelId: string): Promise<any> {
+    try {
+      return await this.repository.getAllsubscribers(channelId);
+    } catch (error) {
+      console.log(error, "all sub got error");
+      throw new Error("Failed to get all sub");
+    }
+  }
 }

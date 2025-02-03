@@ -9,6 +9,8 @@ export interface MessageReply {
   messageId: Types.ObjectId;
   userId: Types.ObjectId;
   content: string;
+  fileUrl: string;
+  messageType: any;
   createdAt: Date;
 }
 
@@ -37,7 +39,7 @@ const MessageSchema = new Schema<Message>(
       enum: ["text", "image", "video", "file"],
       default: "text",
     },
-    fileUrl: { type: String },
+    fileUrl: { type: String, default: "" },
     reactions: [
       {
         userId: { type: Schema.Types.ObjectId, ref: "User" },
@@ -55,7 +57,7 @@ const MessageSchema = new Schema<Message>(
           enum: ["text", "image"],
           default: "text",
         },
-        createdAt: { type: Date, default: Date.now }, 
+        createdAt: { type: Date, default: Date.now },
       },
     ],
     replyTo: { type: Schema.Types.ObjectId, ref: "Message" },

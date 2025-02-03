@@ -100,6 +100,23 @@ export class ChannelSubscriptionRepository
     });
   }
 
+  async getAllsubscribers(channelId: string): Promise<any> {
+    try {
+      const subscribers = await ChannelSubscription.find({
+        channelId,
+        status: "active",
+      })
+        .populate("userId", "username email profileImageURL")
+        .sort({ createdAt: -1 })
+        .exec();
+
+      return subscribers;
+    } catch (error) {
+      console.error("Error fetching subscribed users:", error);
+      throw new Error("Failed to fetch subscribed users");
+    }
+  }
+
   async getSubscriptions(userId: string): Promise<ChannelSubscriptionType[]> {
     return await ChannelSubscription.find({
       userId,

@@ -6,7 +6,9 @@ import Message, {
 
 export class CommunityChatMessageRepository {
   async createMessage(messageData: Partial<MessageType>): Promise<MessageType> {
+    console.log(messageData, "message data got");
     const message = new Message(messageData);
+    console.log(message, "after convertion with model");
     return await message.save();
   }
 

@@ -27,5 +27,9 @@ export class SubscriptionRoutes {
       "/subscriptions/:userId",
       subscriptionController.getSubscribedChannels.bind(subscriptionController)
     );
+    this.router.get(
+      "/subscriptions/allsub/:channelId",
+      subscriptionController.getAllsubscribers.bind(subscriptionController)
+    );
   }
 }

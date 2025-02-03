@@ -107,6 +107,14 @@ export class SocketService {
       socket.on("disconnect", () => {
         this.handleDisconnect(socket);
       });
+
+      socket.on("typing-started", ({ channelId, userId, userName }) => {
+        socket.to(channelId).emit("user-typing", { userId, userName });
+      });
+
+      socket.on("typing-stopped", ({ channelId, userId, userName }) => {
+        socket.to(channelId).emit("user-stopped-typing", { userId, userName });
+      });
     });
   }
 
