@@ -6,10 +6,15 @@ import Message, {
 
 export class CommunityChatMessageRepository {
   async createMessage(messageData: Partial<MessageType>): Promise<MessageType> {
-    console.log(messageData, "message data got");
-    const message = new Message(messageData);
-    console.log(message, "after convertion with model");
-    return await message.save();
+    try {
+      console.log(messageData, "message data got");
+      const message = new Message(messageData);
+      console.log(message, "after conversion with model");
+      return await message.save();
+    } catch (error) {
+      console.error("Error creating message:", error);
+      throw new Error("Failed to create message");
+    }
   }
 
   async getChannelMessages(
@@ -48,12 +53,12 @@ export class CommunityChatMessageRepository {
           if (!reactionMap.has(reaction.emoji)) {
             reactionMap.set(reaction.emoji, {
               emoji: reaction.emoji,
-              users: [],
+              userId: [],
             });
           }
           reactionMap
             .get(reaction.emoji)
-            .users.push(reaction.userId.toString());
+            .userId.push(reaction.userId.toString());
         });
 
         return {
@@ -94,7 +99,11 @@ export class CommunityChatMessageRepository {
     userId: Types.ObjectId,
     emoji: string
   ): Promise<MessageType | null> {
-    const message = await Message.findById(messageId);
+    const message = await Message.findById(messageId).populate({
+      path: "senderId",
+      model: "User",
+      select: "_id username profileImageURL",
+    });
     if (!message) return null;
 
     const existingReactionIndex = message.reactions.findIndex(

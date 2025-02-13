@@ -20,5 +20,11 @@ export class CommunityChatRoutes {
     );
 
     const chatController = new ChatController(communityChatMessageService);
+
+
+    this.router.get(
+      "/channel/:channelId/messages",
+      chatController.getChannelMessages
+    );
   }
 }

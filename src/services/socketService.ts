@@ -9,10 +9,13 @@ import Message, {
   MessageReply,
   Message as MessageType,
 } from "../models/schemas/message";
+import { UserService } from "./userService";
+import { UserRepository } from "../repository/userRepository";
 
 export class SocketService {
   private io: Server;
   private messageService: CommunityChatMessageService;
+  private userService: UserService;
   private subscriptionService: ChannelSubscriptionService;
   private connectedUsers: Map<string, Set<string>> = new Map();
 
@@ -21,6 +24,7 @@ export class SocketService {
     this.messageService = new CommunityChatMessageService(
       new CommunityChatMessageRepository()
     );
+    this.userService = new UserService(new UserRepository());
     this.subscriptionService = new ChannelSubscriptionService(
       new ChannelSubscriptionRepository(),
       new ChannelRepostiory()
@@ -72,6 +76,15 @@ export class SocketService {
         }
       );
 
+      socket.on("get-online-users", ({ channelId }) => {
+        const onlineUsers = Array.from(
+          this.connectedUsers.get(channelId) || []
+        );
+        socket.emit("user-joined", {
+          userId: socket.id,
+          onlineUsers: onlineUsers,
+        });
+      });
       socket.on(
         "reply-to-message",
         async (data: {
@@ -115,6 +128,13 @@ export class SocketService {
       socket.on("typing-stopped", ({ channelId, userId, userName }) => {
         socket.to(channelId).emit("user-stopped-typing", { userId, userName });
       });
+
+      socket.on("delete-message", async ({ messageId, channelId }) => {
+        await this.messageService.deleteMessage(messageId);
+
+        this.io.to(channelId).emit("message-deleted", { messageId });
+        socket.emit("message-deleted", { messageId });
+      });
     });
   }
 
@@ -135,6 +155,10 @@ export class SocketService {
       }
 
       socket.join(data.channelId);
+      console.log(
+        "Connected users after join:",
+        Array.from(this.connectedUsers.get(data.channelId) || [])
+      );
 
       if (!this.connectedUsers.has(data.channelId)) {
         this.connectedUsers.set(data.channelId, new Set());
@@ -236,6 +260,21 @@ export class SocketService {
     }
   }
 
+  private async handleDeleteMessage(
+    socket: Socket,
+    data: {
+      messageId: string;
+    }
+  ) {
+    try {
+      const updatedMessage = await this.messageService.deleteMessage(
+        new Types.ObjectId(data.messageId)
+      );
+    } catch (error) {
+      socket.emit("error", { message: "Failed to edit message" });
+    }
+  }
+
   private async handleMessageReaction(
     socket: Socket,
     data: {
@@ -294,20 +333,27 @@ export class SocketService {
     }
   }
 
-  private handleTypingStarted(
+  private async handleTypingStarted(
     socket: Socket,
     data: { channelId: string; userId: string }
   ) {
-    socket.to(data.channelId).emit("user-typing", { userId: data.userId });
-  }
-
-  private handleTypingStopped(
-    socket: Socket,
-    data: { channelId: string; userId: string }
-  ) {
+    const user = await this.userService.getUserById(data.userId);
+    console.log(user, "user got for typing");
     socket
       .to(data.channelId)
-      .emit("user-stopped-typing", { userId: data.userId });
+      .emit("user-typing", { userId: data.userId, userName: user?.username });
+  }
+
+  private async handleTypingStopped(
+    socket: Socket,
+    data: { channelId: string; userId: string }
+  ) {
+    const user = await this.userService.getUserById(data.userId);
+    console.log(user, "user got for typing");
+    socket.to(data.channelId).emit("user-stopped-typing", {
+      userId: data.userId,
+      userName: user?.username,
+    });
   }
 
   private handleDisconnect(socket: Socket) {

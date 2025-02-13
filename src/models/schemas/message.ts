@@ -8,7 +8,7 @@ interface MessageReaction {
 export interface MessageReply {
   messageId: Types.ObjectId;
   userId: Types.ObjectId;
-  content: string;
+  content?: string;
   fileUrl: string;
   messageType: any;
   createdAt: Date;
@@ -21,6 +21,7 @@ export interface Message extends Document {
   messageType: "text" | "image" | "video" | "file";
   fileUrl?: string;
   reactions: MessageReaction[];
+  status: string;
   replies: MessageReply[];
   replyTo?: any;
   isEdited: boolean;
@@ -33,7 +34,8 @@ const MessageSchema = new Schema<Message>(
   {
     channelId: { type: Schema.Types.ObjectId, ref: "Channel", required: true },
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    content: { type: String, required: true },
+    content: { type: String, default: "" },
+    status: { type: String, default: "active" },
     messageType: {
       type: String,
       enum: ["text", "image", "video", "file"],

@@ -57,6 +57,10 @@ export class CommunityChatMessageService {
     return await this.messageRepository.updateMessage(messageId, { content });
   }
 
+  async deleteMessage(messageId: Types.ObjectId): Promise<boolean | null> {
+    return await this.messageRepository.deleteMessage(messageId);
+  }
+
   async handleReaction(
     messageId: Types.ObjectId,
     userId: Types.ObjectId,
